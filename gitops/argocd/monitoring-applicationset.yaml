@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: monitoring-stack
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - app: prometheus
+            namespace: monitoring
+            chart: prometheus-community/kube-prometheus-stack
+            version: "56.0.0"
+          - app: loki
+            namespace: monitoring
+            chart: grafana/loki
+            version: "5.42.0"
+  template:
+    metadata:
+      name: "{{app}}"
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/Sampanionyy/invoice-api-devops.git
+        targetRevision: HEAD
+        path: "monitoring/{{app}}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{namespace}}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

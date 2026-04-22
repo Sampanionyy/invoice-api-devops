@@ -1,0 +1,9 @@
+# promtail-values.yaml - Collecte les logs des pods vers Loki
+config:
+  clients:
+    - url: http://loki-stack:3100/loki/api/v1/push
+
+tolerations:
+  - key: node-role.kubernetes.io/master
+    operator: Exists
+    effect: NoSchedule
