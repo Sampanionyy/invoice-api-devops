@@ -1,341 +1,114 @@
-# 🧾 invoice-api-devops
+# invoice-api-devops
 
-API de gestion de factures en Node.js avec monitoring complet (Prometheus, Grafana, Loki) déployé sur Kubernetes via Helm et GitOps ArgoCD.
-
----
-
-## 📁 Structure du projet
-
-```
-invoice-api-devops/
-├── src/
-│   └── index.js                  # API Node.js (Express + prom-client)
-├── helm/
-│   └── invoice-api/
-│       ├── Chart.yaml
-│       ├── values.yaml
-│       └── templates/
-│           ├── deployment.yaml
-│           ├── service.yaml
-│           ├── servicemonitor.yaml
-│           └── _helpers.tpl
-├── monitoring/
-│   ├── grafana/
-│   │   └── dashboards/
-│   │       └── invoice-api.json  # Dashboard Grafana prêt à importer
-│   └── loki/
-│       ├── loki-values.yaml
-│       └── promtail-values.yaml
-├── gitops/
-│   └── argocd/
-│       ├── invoice-api-app.yaml
-│       └── monitoring-applicationset.yaml
-├── .github/
-│   └── workflows/
-│       └── ci.yml
-├── Dockerfile
-├── package.json
-└── README.md
-```
+Projet pédagogique de niveau M2 illustrant le déploiement d'une API Node.js sur Kubernetes avec une stack de supervision complète et une approche GitOps.
 
 ---
 
-## 🚀 Prérequis
+## Objectif du projet
 
-```bash
-# Vérifier que tout est installé
-minikube version
-kubectl version --client
-helm version
-docker version
-```
+L'objectif est de comprendre comment une application réelle est déployée, surveillée et maintenue dans un environnement professionnel moderne.
 
----
+Ce projet ne se limite pas à écrire du code applicatif. Il couvre l'ensemble du cycle de vie d'une application :
 
-## 🔧 Initialisation du projet
+- Comment empaqueter une application dans un conteneur Docker
+- Comment déployer ce conteneur sur Kubernetes de façon reproductible avec Helm
+- Comment surveiller l'état de l'application en temps réel avec Prometheus et Grafana
+- Comment centraliser et consulter les logs applicatifs avec Loki
+- Comment automatiser les déploiements sans intervention manuelle grâce à ArgoCD (GitOps)
 
-```bash
-# Cloner le repo
-git clone https://github.com/Sampanionyy/invoice-api-devops.git
-cd invoice-api-devops
-
-# Démarrer Minikube (4 CPU, 6Go RAM recommandé pour la stack monitoring)
-minikube start --cpus=4 --memory=6144 --driver=docker
-
-# Activer les addons nécessaires
-minikube addons enable ingress
-minikube addons enable metrics-server
-```
+L'API de gestion de factures est le prétexte applicatif. Ce qui est appris ici s'applique à n'importe quelle application web.
 
 ---
 
-## 📦 ÉTAPE 1 — Ajouter les repos Helm
+## Pourquoi ces outils
 
-```bash
-# Prometheus & Grafana (kube-prometheus-stack)
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+### Docker
+Permet d'empaqueter l'application et toutes ses dépendances dans une image portable. L'image se comporte de manière identique sur n'importe quelle machine, qu'il s'agisse d'un ordinateur de développement ou d'un serveur de production.
 
-# Grafana (Loki)
-helm repo add grafana https://grafana.github.io/helm-charts
+### Kubernetes
+Orchestre les conteneurs. Il s'assure que le bon nombre de copies de l'application tourne en permanence, redémarre automatiquement un conteneur qui crashe, et répartit la charge entre les instances. Minikube est la version locale de Kubernetes, utilisée ici pour apprendre sans infrastructure cloud.
 
-# ArgoCD
-helm repo add argo https://argoproj.github.io/argo-helm
+### Helm
+Kubernetes nécessite de nombreux fichiers de configuration YAML. Helm est un gestionnaire de paquets pour Kubernetes : il permet de regrouper ces fichiers en un chart réutilisable, paramétrable et versionné. Plutôt que de maintenir des dizaines de fichiers à la main, on installe et met à jour un chart avec une seule commande.
 
-# Mettre à jour tous les repos
-helm repo update
+### Prometheus
+Collecte des métriques numériques en temps réel : nombre de requêtes par seconde, temps de réponse, utilisation CPU et mémoire, nombre de factures créées. Ces métriques sont exposées par l'API sur la route /metrics et scraped automatiquement par Prometheus toutes les 15 secondes.
 
-# Vérifier les repos ajoutés
-helm repo list
+### Grafana
+Visualise les métriques collectées par Prometheus sous forme de tableaux de bord. Grafana permet de détecter une dégradation de performance, une surcharge, ou une anomalie métier sans avoir à lire des logs bruts.
+
+### Loki
+Centralise les logs de tous les pods Kubernetes. Sans Loki, consulter les logs d'une application distribuée en plusieurs instances nécessite de se connecter manuellement sur chaque pod. Loki agrège tout au même endroit et permet de faire des recherches dans les logs directement depuis Grafana.
+
+### ArgoCD (GitOps)
+Principe fondateur du GitOps : le dépôt Git est la source de vérité unique pour l'état de l'infrastructure. ArgoCD surveille en permanence le dépôt GitHub. Dès qu'un changement est détecté dans les fichiers Helm (par exemple, un nouveau tag d'image suite à un build CI), ArgoCD synchronise automatiquement le cluster Kubernetes pour refléter cet état. Le déploiement ne passe plus par une commande manuelle mais par un simple push Git.
+
+---
+
+## Architecture globale
+
+```
+Développeur
+    |
+    | git push
+    v
+GitHub (invoice-api-devops)
+    |
+    |-- GitHub Actions (CI)
+    |       - build image Docker
+    |       - push sur DockerHub
+    |       - met à jour le tag dans values.yaml
+    |
+    v
+ArgoCD (GitOps)
+    - détecte le changement dans le repo
+    - applique le Helm chart sur Kubernetes
+    |
+    v
+Kubernetes (Minikube)
+    |
+    |-- Namespace: invoice
+    |       - Deployment: invoice-api (2 replicas)
+    |       - Service: expose le port 3000
+    |
+    |-- Namespace: monitoring
+            - Prometheus  (collecte les metriques)
+            - Grafana     (visualisation)
+            - Loki        (centralisation des logs)
+            - Promtail    (agent de collecte de logs)
 ```
 
 ---
 
-## 🗂️ ÉTAPE 2 — Créer les namespaces
+## L'application : API de gestion de factures
+
+Une API REST en Node.js (Express) qui gère des factures avec calcul automatique de la TVA.
+
+### Taux de TVA disponibles
+
+| Type | Taux | Usage |
+|---|---|---|
+| standard | 20% | Prestations de services, produits courants |
+| reduit | 10% | Restauration, travaux, transport |
+| super_reduit | 5.5% | Alimentation, livres, medicaments |
+| zero | 0% | Exports, intracommunautaire |
+
+### Routes disponibles
+
+| Methode | Route | Description |
+|---|---|---|
+| GET | /health | Etat de l'application |
+| GET | /metrics | Metriques Prometheus |
+| GET | /tva-rates | Liste des taux de TVA |
+| GET | /invoices | Lister toutes les factures |
+| GET | /invoices/:id | Consulter une facture |
+| POST | /invoices | Creer une facture |
+| PATCH | /invoices/:id/status | Changer le statut |
+| DELETE | /invoices/:id | Supprimer une facture |
+
+### Exemple de creation de facture
 
 ```bash
-# Namespace pour l'application
-kubectl create namespace invoice
-
-# Namespace pour le monitoring
-kubectl create namespace monitoring
-
-# Namespace pour ArgoCD
-kubectl create namespace argocd
-
-# Vérifier
-kubectl get namespaces
-```
-
----
-
-## 📊 ÉTAPE 3 — Installer Prometheus par Helm
-
-```bash
-# Installer kube-prometheus-stack (Prometheus + Alertmanager + node-exporter)
-helm install prometheus prometheus-community/kube-prometheus-stack \
-  --namespace monitoring \
-  --set prometheus.prometheusSpec.scrapeInterval=15s \
-  --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
-  --set alertmanager.enabled=false \
-  --wait
-
-# Vérifier que les pods démarrent (attendre ~2 min)
-kubectl get pods -n monitoring
-
-# Vérifier les services
-kubectl get svc -n monitoring
-```
-
----
-
-## 📈 ÉTAPE 4 — Installer Grafana par Helm
-
-> Grafana est déjà inclus dans kube-prometheus-stack (étape 3).
-> Si tu veux une instance Grafana séparée :
-
-```bash
-helm install grafana grafana/grafana \
-  --namespace monitoring \
-  --set adminPassword='admin123' \
-  --set service.type=NodePort \
-  --wait
-
-# Vérifier
-kubectl get pods -n monitoring -l app.kubernetes.io/name=grafana
-```
-
----
-
-## 🌐 ÉTAPE 5 — Accéder à Grafana
-
-```bash
-# Méthode 1 : port-forward (recommandé pour Minikube)
-kubectl port-forward svc/prometheus-grafana 3001:80 -n monitoring &
-
-# Ouvrir dans le navigateur :
-# http://localhost:3001
-# Login : admin
-# Password :
-kubectl get secret -n monitoring prometheus-grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
-
-# Méthode 2 : via Minikube service
-minikube service prometheus-grafana -n monitoring
-```
-
----
-
-## 🔗 ÉTAPE 6 — Configurer la source de données Prometheus
-
-Dans Grafana → **Configuration > Data Sources > Add data source** :
-
-```
-Type     : Prometheus
-URL      : http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090
-Access   : Server (default)
-```
-
-Ou via CLI (API Grafana) :
-
-```bash
-curl -X POST http://admin:admin123@localhost:3001/api/datasources \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Prometheus",
-    "type": "prometheus",
-    "url": "http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090",
-    "access": "proxy",
-    "isDefault": true
-  }'
-```
-
----
-
-## 📋 ÉTAPE 7 — Importer un dashboard Kubernetes
-
-### Dashboard Kubernetes officiel (ID: 6417)
-
-Dans Grafana → **Dashboards > Import** :
-- Entrer l'ID : `6417` → Load
-- Sélectionner la datasource Prometheus → Import
-
-### Dashboard Invoice API (custom)
-
-```bash
-# Le fichier est dans : monitoring/grafana/dashboards/invoice-api.json
-# Grafana → Dashboards > Import > Upload JSON file
-# Sélectionner : monitoring/grafana/dashboards/invoice-api.json
-```
-
-Autres dashboards utiles :
-- `1860` — Node Exporter Full
-- `7249` — Kubernetes Cluster Overview
-- `15760` — Kubernetes pod logs
-
----
-
-## 📝 ÉTAPE 8 — Installer Loki
-
-```bash
-# Installer Loki (mode single binary pour Minikube)
-helm install loki grafana/loki \
-  --namespace monitoring \
-  --values monitoring/loki/loki-values.yaml \
-  --wait
-
-# Installer Promtail (agent qui collecte les logs des pods)
-helm install promtail grafana/promtail \
-  --namespace monitoring \
-  --values monitoring/loki/promtail-values.yaml \
-  --wait
-
-# Vérifier
-kubectl get pods -n monitoring | grep -E 'loki|promtail'
-```
-
----
-
-## 🔗 ÉTAPE 9 — Ajouter Loki comme source de données
-
-Dans Grafana → **Configuration > Data Sources > Add data source** :
-
-```
-Type  : Loki
-URL   : http://loki.monitoring.svc.cluster.local:3100
-```
-
-Ou via API :
-
-```bash
-curl -X POST http://admin:admin123@localhost:3001/api/datasources \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Loki",
-    "type": "loki",
-    "url": "http://loki.monitoring.svc.cluster.local:3100",
-    "access": "proxy"
-  }'
-```
-
-**Tester dans Grafana → Explore :**
-```logql
-{namespace="invoice"} |= ""
-```
-
----
-
-## 🔄 ÉTAPE 10 — GitOps avec ArgoCD
-
-### Installer ArgoCD
-
-```bash
-helm install argocd argo/argo-cd \
-  --namespace argocd \
-  --set server.service.type=NodePort \
-  --wait
-
-# Récupérer le mot de passe admin
-kubectl get secret argocd-initial-admin-secret -n argocd \
-  -o jsonpath="{.data.password}" | base64 --decode; echo
-
-# Accéder à l'UI ArgoCD
-kubectl port-forward svc/argocd-server 8080:443 -n argocd &
-# https://localhost:8080  (accepter le certificat self-signed)
-# Login: admin / <password ci-dessus>
-```
-
-### Déployer l'API via GitOps
-
-```bash
-# Appliquer l'Application ArgoCD pour l'invoice-api
-kubectl apply -f gitops/argocd/invoice-api-app.yaml
-
-# Appliquer l'ApplicationSet pour le monitoring
-kubectl apply -f gitops/argocd/monitoring-applicationset.yaml
-
-# Vérifier les applications ArgoCD
-kubectl get applications -n argocd
-
-# Synchroniser manuellement si besoin
-kubectl patch application invoice-api -n argocd \
-  --type merge -p '{"operation":{"sync":{}}}'
-```
-
----
-
-## 🐳 Build & déploiement manuel de l'API
-
-```bash
-# Pointer Docker vers le daemon Minikube
-eval $(minikube docker-env)
-
-# Build de l'image
-docker build -t invoice-api:latest .
-
-# Déployer via Helm
-helm install invoice-app ./helm/invoice-api \
-  --namespace invoice \
-  --wait
-
-# Vérifier
-kubectl get pods -n invoice
-kubectl get svc -n invoice
-
-# Port-forward pour tester l'API
-kubectl port-forward svc/invoice-app-invoice-api 3000:3000 -n invoice &
-```
-
----
-
-## 🧪 Tester l'API
-
-```bash
-# Health check
-curl http://localhost:3000/health
-
-# Voir les taux de TVA disponibles
-curl http://localhost:3000/tva-rates
-
-# Créer une facture (TVA standard 20%)
 curl -X POST http://localhost:3000/invoices \
   -H "Content-Type: application/json" \
   -d '{
@@ -343,77 +116,266 @@ curl -X POST http://localhost:3000/invoices \
     "tvaType": "standard",
     "dueDate": "2025-12-31",
     "items": [
-      { "description": "Développement web", "quantity": 5, "unitPrice": 800 },
-      { "description": "Hébergement mensuel", "quantity": 12, "unitPrice": 50 }
+      { "description": "Developpement web", "quantity": 5, "unitPrice": 800 },
+      { "description": "Hebergement mensuel", "quantity": 12, "unitPrice": 50 }
     ]
   }'
+```
 
-# Créer une facture (TVA réduite 10%)
-curl -X POST http://localhost:3000/invoices \
-  -H "Content-Type: application/json" \
-  -d '{
-    "client": "Restaurant Le Gourmet",
-    "tvaType": "reduit",
-    "items": [
-      { "description": "Logiciel caisse", "quantity": 1, "unitPrice": 1200 }
-    ]
-  }'
+Reponse :
 
-# Lister toutes les factures
-curl http://localhost:3000/invoices
-
-# Changer le statut d'une facture
-curl -X PATCH http://localhost:3000/invoices/<ID>/status \
-  -H "Content-Type: application/json" \
-  -d '{"status": "paid"}'
-
-# Voir les métriques Prometheus
-curl http://localhost:3000/metrics
+```json
+{
+  "id": "uuid-...",
+  "number": "INV-0001",
+  "client": "Acme Corp",
+  "status": "draft",
+  "subtotal": 4600.00,
+  "tvaRate": 0.20,
+  "tvaPercent": "20.0%",
+  "tvaAmount": 920.00,
+  "total": 5520.00
+}
 ```
 
 ---
 
-## 💰 Taux de TVA disponibles
+## Structure du projet
 
-| Type | Taux | Cas d'usage |
-|------|------|-------------|
-| `standard` | 20% | Prestations de services, produits standard |
-| `reduit` | 10% | Restauration, travaux, transport |
-| `super_reduit` | 5.5% | Alimentation, livres, médicaments |
-| `zero` | 0% | Exports, intracommunautaire |
+```
+invoice-api-devops/
+|
+|-- src/
+|   └── index.js                        # API Node.js
+|
+|-- helm/
+|   └── invoice-api/
+|       |-- Chart.yaml                  # Metadonnees du chart
+|       |-- values.yaml                 # Parametres configurables
+|       └── templates/
+|           |-- deployment.yaml         # Deploiement Kubernetes
+|           |-- service.yaml            # Exposition reseau
+|           |-- servicemonitor.yaml     # Scraping Prometheus
+|           └── _helpers.tpl            # Fonctions Helm
+|
+|-- monitoring/
+|   |-- grafana/
+|   |   └── dashboards/
+|   |       └── invoice-api.json        # Dashboard custom
+|   └── loki/
+|       |-- loki-values.yaml            # Config Loki
+|       └── promtail-values.yaml        # Config Promtail
+|
+|-- gitops/
+|   └── argocd/
+|       |-- invoice-api-app.yaml        # Application ArgoCD
+|       └── monitoring-applicationset.yaml
+|
+|-- .github/
+|   └── workflows/
+|       └── ci.yml                      # Pipeline CI/CD
+|
+|-- Dockerfile
+|-- package.json
+└── README.md
+```
 
 ---
 
-## 🔁 Workflow GitOps complet
+## Deploiement pas a pas
 
-```
-Code push → GitHub Actions → Build Docker image
-     → Push DockerHub → Update values.yaml (image tag)
-          → Push to main → ArgoCD détecte le changement
-               → Sync automatique sur Kubernetes
-                    → Nouveau pod déployé 🚀
-```
-
----
-
-## 🛠️ Commandes utiles
+### Prerequis
 
 ```bash
-# Status global
+minikube version
+kubectl version --client
+helm version
+docker version
+```
+
+### Demarrer Minikube
+
+```bash
+minikube start --cpus=4 --memory=6144 --driver=docker
+minikube addons enable ingress
+minikube addons enable metrics-server
+```
+
+### Etape 1 - Ajouter les repos Helm
+
+```bash
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo add grafana https://grafana.github.io/helm-charts
+helm repo add argo https://argoproj.github.io/argo-helm
+helm repo update
+```
+
+### Etape 2 - Creer les namespaces
+
+```bash
+kubectl create namespace invoice
+kubectl create namespace monitoring
+kubectl create namespace argocd
+```
+
+### Etape 3 - Installer Prometheus
+
+```bash
+helm install prometheus prometheus-community/kube-prometheus-stack \
+  --namespace monitoring \
+  --set prometheus.prometheusSpec.scrapeInterval=15s \
+  --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
+  --set alertmanager.enabled=false \
+  --wait
+```
+
+### Etape 4 - Installer Grafana
+
+Grafana est inclus dans kube-prometheus-stack. Pour une instance separee :
+
+```bash
+helm install grafana grafana/grafana \
+  --namespace monitoring \
+  --set adminPassword='admin123' \
+  --set service.type=NodePort \
+  --wait
+```
+
+### Etape 5 - Acceder a Grafana
+
+```bash
+kubectl port-forward svc/prometheus-grafana 3001:80 -n monitoring &
+
+# Recuperer le mot de passe
+kubectl get secret -n monitoring prometheus-grafana \
+  -o jsonpath="{.data.admin-password}" | base64 --decode; echo
+```
+
+Ouvrir http://localhost:3001 — login : admin
+
+### Etape 6 - Configurer Prometheus comme source de donnees
+
+Dans Grafana : Connections > Data sources > Add data source > Prometheus
+
+```
+URL : http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090
+```
+
+Cliquer sur "Save & test".
+
+### Etape 7 - Importer un dashboard Kubernetes
+
+Dans Grafana : Dashboards > Import > entrer l'ID 6417 > selectionner la datasource Prometheus.
+
+Pour le dashboard custom de l'API :
+Dashboards > Import > Upload JSON > selectionner monitoring/grafana/dashboards/invoice-api.json
+
+### Etape 8 - Installer Loki
+
+```bash
+helm install loki grafana/loki \
+  --namespace monitoring \
+  --values monitoring/loki/loki-values.yaml \
+  --wait
+
+helm install promtail grafana/promtail \
+  --namespace monitoring \
+  --values monitoring/loki/promtail-values.yaml \
+  --wait
+```
+
+### Etape 9 - Ajouter Loki comme source de donnees
+
+Dans Grafana : Connections > Data sources > Add data source > Loki
+
+```
+URL : http://loki.monitoring.svc.cluster.local:3100
+```
+
+Tester dans Grafana > Explore :
+
+```logql
+{namespace="invoice"} |= ""
+```
+
+### Etape 10 - GitOps avec ArgoCD
+
+```bash
+helm install argocd argo/argo-cd \
+  --namespace argocd \
+  --set server.service.type=NodePort \
+  --wait
+
+# Mot de passe admin
+kubectl get secret argocd-initial-admin-secret -n argocd \
+  -o jsonpath="{.data.password}" | base64 --decode; echo
+
+# Acceder a l'UI
+kubectl port-forward svc/argocd-server 8080:443 -n argocd &
+```
+
+Ouvrir https://localhost:8080 — login : admin
+
+Deployer l'application via GitOps :
+
+```bash
+kubectl apply -f gitops/argocd/invoice-api-app.yaml
+```
+
+### Build et deploiement de l'API
+
+```bash
+# Generer le package-lock.json (une seule fois)
+npm install
+
+# Pointer Docker vers Minikube
+eval $(minikube docker-env)
+
+# Build
+docker build -t invoice-api:latest .
+
+# Deployer
+helm install invoice-app ./helm/invoice-api \
+  --namespace invoice \
+  --wait
+
+# Tester
+kubectl port-forward svc/invoice-app-invoice-api 3000:3000 -n invoice &
+curl http://localhost:3000/health
+```
+
+---
+
+## Commandes utiles
+
+```bash
+# Etat global
 kubectl get all -n invoice
 kubectl get all -n monitoring
 
-# Logs de l'API
+# Logs de l'API en temps reel
 kubectl logs -l app=invoice-app-invoice-api -n invoice -f
 
-# Désinstaller tout
+# Desinstaller tout
 helm uninstall invoice-app -n invoice
 helm uninstall prometheus -n monitoring
-helm uninstall grafana -n monitoring
 helm uninstall loki -n monitoring
 helm uninstall promtail -n monitoring
 helm uninstall argocd -n argocd
 
-# Arrêter Minikube
+# Arreter Minikube
 minikube stop
 ```
+
+---
+
+## Ce que ce projet apprend
+
+A l'issue de ce projet, les notions suivantes sont maitrisees en pratique :
+
+- Conteneurisation d'une application Node.js avec Docker
+- Deploiement sur Kubernetes avec gestion des ressources, health checks et replicas
+- Packaging d'une application Kubernetes avec Helm
+- Observabilite : metriques avec Prometheus, visualisation avec Grafana, logs avec Loki
+- GitOps : synchronisation automatique entre un depot Git et un cluster Kubernetes via ArgoCD
+- Pipeline CI/CD avec GitHub Actions : build, push et mise a jour automatique du tag d'image
