@@ -348,7 +348,25 @@ curl http://localhost:3000/health
 
 ## Commandes utiles
 
+
 ```bash
+# 1. Démarrer Minikube
+minikube start --cpus=4 --memory=6144 --driver=docker
+
+# 2. Corriger les limites inotify (nécessaire pour Promtail)
+minikube ssh "sudo sysctl fs.inotify.max_user_instances=512"
+minikube ssh "sudo sysctl fs.inotify.max_user_watches=524288"
+
+# 3. Port-forwards (à lancer en arrière-plan)
+kubectl port-forward svc/prometheus-grafana 3001:80 -n monitoring &
+kubectl port-forward svc/invoice-app-invoice-api 3000:3000 -n invoice &
+kubectl port-forward svc/argocd-server 8080:443 -n argocd &
+
+# 4. Vérifier que tout tourne
+kubectl get pods -n invoice
+kubectl get pods -n monitoring
+kubectl get pods -n argocd
+
 # Etat global
 kubectl get all -n invoice
 kubectl get all -n monitoring
