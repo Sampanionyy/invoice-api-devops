@@ -2,7 +2,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: {{ include "invoice-api.fullname" . }}
-  namespace: monitoring
+  namespace: {{ .Release.Namespace }}
   labels:
     release: prometheus
 spec:
@@ -13,6 +13,6 @@ spec:
     matchNames:
       - invoice
   endpoints:
-    - port: "3000"
+    - port: http
       path: /metrics
       interval: 15s
