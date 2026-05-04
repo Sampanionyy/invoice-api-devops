@@ -182,6 +182,86 @@ invoice-api-devops/
 
 ---
 
+## Démarrage rapide (après installation initiale)
+
+> Cette section suppose que toutes les installations ont déjà été effectuées une première fois.
+> Les Helm charts sont persistés par Minikube — il n'est pas nécessaire de les réinstaller.
+
+### Étape 1 — Démarrer Minikube
+
+```bash
+minikube start --cpus=4 --memory=6144 --driver=docker
+```
+
+### Étape 2 — Corriger les limites inotify (nécessaire pour Promtail)
+
+```bash
+minikube ssh "sudo sysctl fs.inotify.max_user_instances=512"
+minikube ssh "sudo sysctl fs.inotify.max_user_watches=524288"
+```
+
+### Étape 3 — Vérifier que tous les pods sont Running
+
+```bash
+kubectl get pods -n invoice
+kubectl get pods -n monitoring
+kubectl get pods -n argocd
+```
+
+Attendre que tous les pods soient en statut `Running` avant de continuer.
+En cas de pod en `Pending` ou `CrashLoopBackOff` :
+
+```bash
+kubectl describe pod <nom-du-pod> -n <namespace>
+```
+
+### Étape 4 — Lancer les port-forwards
+
+```bash
+kubectl port-forward svc/prometheus-grafana 3001:80 -n monitoring &
+kubectl port-forward svc/invoice-app-invoice-api 3000:3000 -n invoice &
+kubectl port-forward svc/argocd-server 8080:443 -n argocd &
+```
+
+### Étape 5 — Vérifier que l'API répond
+
+```bash
+curl http://localhost:3000/health
+```
+
+### Accès aux interfaces
+
+| Interface  | URL                    | Login |
+|------------|------------------------|-------|
+| API        | http://localhost:3000  | —     |
+| Grafana    | http://localhost:3001  | admin |
+| Prometheus | http://localhost:9090  | —     |
+| ArgoCD     | https://localhost:8080 | admin |
+
+### Récupérer les mots de passe
+
+```bash
+# Grafana
+kubectl get secret -n monitoring prometheus-grafana \
+  -o jsonpath="{.data.admin-password}" | base64 --decode; echo
+
+# ArgoCD
+kubectl get secret argocd-initial-admin-secret -n argocd \
+  -o jsonpath="{.data.password}" | base64 --decode; echo
+```
+
+### Arrêter proprement
+
+```bash
+# Couper les port-forwards
+kill $(lsof -t -i:3000) $(lsof -t -i:3001) $(lsof -t -i:8080) $(lsof -t -i:9090) 2>/dev/null
+
+# Arrêter Minikube
+minikube stop
+```
+
+---
+
 ## Deploiement pas a pas
 
 ### Prerequis
@@ -348,25 +428,7 @@ curl http://localhost:3000/health
 
 ## Commandes utiles
 
-
 ```bash
-# 1. Démarrer Minikube
-minikube start --cpus=4 --memory=6144 --driver=docker
-
-# 2. Corriger les limites inotify (nécessaire pour Promtail)
-minikube ssh "sudo sysctl fs.inotify.max_user_instances=512"
-minikube ssh "sudo sysctl fs.inotify.max_user_watches=524288"
-
-# 3. Port-forwards (à lancer en arrière-plan)
-kubectl port-forward svc/prometheus-grafana 3001:80 -n monitoring &
-kubectl port-forward svc/invoice-app-invoice-api 3000:3000 -n invoice &
-kubectl port-forward svc/argocd-server 8080:443 -n argocd &
-
-# 4. Vérifier que tout tourne
-kubectl get pods -n invoice
-kubectl get pods -n monitoring
-kubectl get pods -n argocd
-
 # Etat global
 kubectl get all -n invoice
 kubectl get all -n monitoring
