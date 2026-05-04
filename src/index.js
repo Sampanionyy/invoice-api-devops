@@ -166,4 +166,4 @@ app.get('/tva-rates', (req, res) => {
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Invoice API running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Invoice API running on port ${PORT}`));
