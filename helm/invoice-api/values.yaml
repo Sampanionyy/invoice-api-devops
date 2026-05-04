@@ -2,7 +2,7 @@ replicaCount: 2
 
 image:
   repository: sampaniony/invoice-api
-  tag: "b72d343"
+  tag: "0e4fbe0"
   pullPolicy: IfNotPresent
 
 service:
